@@ -296,7 +296,23 @@ Rules for the HTML:
 
 ### Phase 2b: Reference tables (bottom of HTML)
 
-The reference tables are the designer-facing deliverable — a complete token manifest that documents every value needed to build the component in Figma, without requiring the designer to read JSON or source code. Include **all** of the following tables that apply:
+The reference tables are the designer-facing deliverable — a complete token manifest that documents every value needed to build the component in Figma, without requiring the designer to read JSON or source code.
+
+**MANDATORY CHECKLIST — every component HTML file must include ALL of these sections. Do not skip any.**
+
+- [ ] Visual variant grid (all states rendered)
+- [ ] Size Geometry table
+- [ ] Color Tokens — Enabled State table
+- [ ] Interaction State Tokens table
+- [ ] Disabled State Tokens table
+- [ ] Dark Mode Color Tokens table (if applicable)
+- [ ] **Figma Auto-Layout Settings table** ← often skipped, always required
+- [ ] **Figma Variables Needed table** ← often skipped, always required
+- [ ] **Variant Property Axes table (Figma format)** ← often skipped, always required
+
+The last three tables are the **Figma Import Cheat Sheet** — they are the most important deliverable for designers. Without them, a designer cannot build the component in Figma from the reference page alone. Never omit them.
+
+Include **all** of the following tables that apply:
 
 #### Required tables
 
