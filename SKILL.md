@@ -22,18 +22,82 @@ platforms or against a Figma design file.
 
 ---
 
-## Step 0 — Scope & Orientation
-
-Ask the user (if not already clear):
-
-1. **Codebase path(s)** — one or more local directories to audit
-2. **Platforms** — web, iOS, Android, React Native, Flutter, etc. (auto-detect if not specified)
-3. **Focus** — full audit, or specific categories (colors only, typography only, etc.)
-4. **Comparison mode** — single codebase, cross-platform, or code-vs-Figma
-5. **Component focus** — full system audit, or drill into a specific component (e.g., Button)
-6. **Output directory** — where to write audit artifacts (default: `audit/` inside the repo, or a user-specified path)
+## Step 0 — Scope & Component Discovery
 
 If the user provides a repo URL instead of a local path, clone it (shallow: `git clone --depth 1`) first.
+
+### 0a. Auto-detect platform & stack
+
+Scan for framework config files (`package.json`, `Podfile`, `build.gradle`, `pubspec.yaml`, `project.pbxproj`) and report the detected platform(s) before proceeding.
+
+### 0b. Discover all UI components
+
+**Do this automatically — do not ask the user to name components.** Scan the codebase for all UI library components using the platform-appropriate strategy:
+
+| Platform | Discovery strategy |
+|----------|-------------------|
+| **Web (React/Vue/Svelte)** | Glob for `components/**/*.tsx`, `components/**/*.vue`, `components/**/*.svelte`, `ui/**/*.tsx`. Filter to files that export a visual component (default export or named export of a PascalCase function/const). Exclude test files, stories, styles-only files, types/interfaces-only files, barrel `index.ts` re-exports, and utilities/hooks. |
+| **Web (Web Components/Stencil)** | Glob for `*.tsx` or `*.ts` files containing `@Component` decorators or `customElements.define`. |
+| **iOS (UIKit)** | Glob for `*View.swift`, `*Cell.swift`, `*Control.swift`, `*Button.swift`. Filter to classes that subclass `UIView`, `UIControl`, `UITableViewCell`, `UICollectionViewCell`. |
+| **iOS (SwiftUI)** | Glob for `*.swift` files containing `struct ... : View`. Filter to files in `Views/`, `Components/`, or `UI/` directories. |
+| **Android (XML)** | Glob for `res/layout/*.xml`. Also check for custom views extending `View`, `ViewGroup`, `MaterialButton`, etc. in `*.kt`/`*.java`. |
+| **Android (Compose)** | Glob for `*.kt` files containing `@Composable fun` in `ui/`, `components/`, or `theme/` directories. |
+| **React Native** | Glob for `components/**/*.tsx`, `ui/**/*.tsx`. Same filtering as React. |
+| **Flutter** | Glob for `lib/**/*.dart` files containing `class ... extends StatelessWidget` or `StatefulWidget`. |
+
+**Filtering heuristics** (apply across all platforms):
+- **Include:** Files that render visual UI (return JSX, build widget trees, inflate layouts, conform to `View`)
+- **Exclude:** Pure logic (hooks, utils, helpers, stores, reducers, services, API clients), type definitions, test files (`*.test.*`, `*.spec.*`, `*_test.dart`), story files (`*.stories.*`), style-only files (`*.styled.ts`, `*.styles.ts` with no component export), barrel re-exports (`index.ts` that only re-export), HOCs/wrappers that don't render their own UI, config files
+- **Classify** components by complexity: **Atom** (no child components — buttons, badges, spinners, icons), **Molecule** (composes atoms — search bars, form fields), **Organism** (composes molecules — navbars, cards, modals, dialogs), **Template/Page** (full layouts). Use file size, import count, and child component usage as signals.
+
+Use subagents to parallelize discovery across large codebases (e.g., one agent per top-level directory).
+
+### 0c. Present the component inventory
+
+Generate an **`inventory.html`** file in the output directory. This is the first deliverable — produced before any deep-dive work begins. It serves as the interactive menu for the rest of the audit.
+
+#### inventory.html structure
+
+The page must match the visual style of component HTML pages (same font, spacing, color palette). Include:
+
+1. **Title & subtitle** — `Component Inventory: <project-name>` + source path + date
+2. **Stack tags** — framework, styling approach, state management, UI library (e.g., `React 17`, `styled-components 5`, `Radix UI`, `Vite`)
+3. **Summary strip** — total visual components + count per tier (Atoms / Molecules / Organisms / Templates), displayed as large numbers with labels
+4. **Filter bar** — text search input + tier toggle buttons (All / Atoms / Molecules / Organisms / Templates) + live match count. Filtering is client-side JavaScript.
+5. **Tier sections** — one `<div>` per tier, each with:
+   - Tier header: name + count badge + one-line description
+   - Table columns: `#` | Component | File | Exports | Lines
+   - Lines column includes a proportional bar (`<span>` with inline width) for visual scanning of component complexity
+   - Rows are filterable by the search input and tier buttons
+6. **Footer** — generator attribution (`/code-audit — Component Discovery (Step 0b)`) + date + source path
+7. **Figma capture script** in `<head>`:
+   `<script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>`
+
+#### Tier descriptions for the header
+
+| Tier | Description |
+|------|-------------|
+| Atoms | Self-contained primitives — no child component composition |
+| Molecules | Small composites — combine atoms into functional units |
+| Organisms | Complex composites — navbars, modals, sidebars, data displays, sharing panels |
+| Templates / Pages | Full page layouts and high-level wrappers — typically too broad for component audit |
+
+#### Filtering behavior
+
+- Text search matches against component name and file path (case-insensitive)
+- Tier buttons show/hide entire tier sections
+- Match count updates live (e.g., "12 matches")
+- "All" button is active by default
+
+**After generating `inventory.html` and opening it in the browser**, present a brief markdown summary in the conversation and ask the user:
+> Which component(s) would you like to audit first? You can pick one, several (comma-separated), or say "all atoms" / "all molecules" to batch them.
+
+### 0d. Confirm output settings
+
+Only ask about these if not already obvious from context:
+- **Output directory** — default: `audit/` inside the repo, or a user-specified path
+- **Comparison mode** — single codebase, cross-platform, or code-vs-Figma (default: single codebase)
+- **Focus** — full audit with component deep-dives, or tokens-only (default: full)
 
 ---
 
@@ -432,6 +496,7 @@ Save all artifacts to the output directory:
 
 | File | Content |
 |------|---------|
+| `inventory.html` | Interactive component inventory — auto-generated in Step 0c, always the first deliverable. Filterable by tier and search. |
 | `<platform>-design-system-audit.md` | Full audit report (Executive Summary → Strengths/Weaknesses → Layer 1 extraction → Layer 2 patterns → Layer 3 recommendations → Maturity Scorecard) |
 | `<component>.html` | HTML reference page rendering all variants with actual code values (Phase 2 — visual proof) |
 | `<Component>-<platform>.json` | Component spec JSON derived from HTML reference (Phase 3 — Figma plugin import) |
